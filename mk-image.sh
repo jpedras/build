@@ -116,6 +116,7 @@ y
 EOF
 
 	# burn u-boot
+	echo "Writing u-boot unto system image"
 	if [ "$CHIP" == "rk3288" ] || [ "$CHIP" == "rk322x" ] || [ "$CHIP" == "rk3036" ]; then
 		dd if=${OUT}/u-boot/idbloader.img of=${SYSTEM} seek=${LOADER1_START} conv=notrunc
 	elif [ "$CHIP" == "rk3399" ]; then
@@ -131,9 +132,11 @@ EOF
 	fi
 
 	# burn boot image
+	echo "Writing boot.img unto system image"
 	dd if=${OUT}/boot.img of=${SYSTEM} conv=notrunc seek=${BOOT_START}
 
 	# burn rootfs image
+	echo "Writing rootfs unto system image"
 	dd if=${ROOTFS_PATH} of=${SYSTEM} conv=notrunc,fsync seek=${ROOTFS_START}
 }
 
