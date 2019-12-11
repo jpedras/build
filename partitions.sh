@@ -20,7 +20,7 @@ ATF_START=$(expr ${LOADER2_START} + ${LOADER2_SIZE})
 BOOT_START=$(expr ${ATF_START} + ${ATF_SIZE})
 ROOTFS_START=$(expr ${BOOT_START} + ${BOOT_SIZE})
 
-# 0=no, anything else yes
+# 1=yes, anything else no
 MULTIROOTFS=1
 ROOTFS2_START=$(expr ${ROOTFS_START} + ${ROOT_SIZE})
 
