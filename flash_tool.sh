@@ -85,6 +85,7 @@ flash_upgt() {
 }
 
 flash_sdcard() {
+	echo "Pouring image unto ${DEVICE}"
 	pv -tpreb ${IMAGE} | sudo dd of=${DEVICE} seek=${SEEK} conv=notrunc
 	sync
 }

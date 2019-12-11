@@ -85,6 +85,9 @@ generate_system_image() {
 	# but this will overrite the backup table of GPT
 	# will cause corruption error for GPT
 	IMG_ROOTFS_SIZE=$(stat -L --format="%s" ${ROOTFS_PATH})
+	if [ "${MULTIROOTFS}" == "1" ];  then
+		IMG_ROOTFS_SIZE=$(expr ${IMG_ROOTFS_SIZE})
+	fi
 	GPTIMG_MIN_SIZE=$(expr $IMG_ROOTFS_SIZE + \( ${LOADER1_SIZE} + ${RESERVED1_SIZE} + ${RESERVED2_SIZE} + ${LOADER2_SIZE} + ${ATF_SIZE} + ${BOOT_SIZE} + 35 \) \* 512)
 	GPT_IMAGE_SIZE=$(expr $GPTIMG_MIN_SIZE \/ 1024 \/ 1024 + 2)
 
@@ -98,10 +101,18 @@ generate_system_image() {
 	parted -s ${SYSTEM} unit s mkpart trust ${ATF_START} $(expr ${BOOT_START} - 1)
 	parted -s ${SYSTEM} unit s mkpart boot ${BOOT_START} $(expr ${ROOTFS_START} - 1)
 	parted -s ${SYSTEM} set 4 boot on
-	parted -s ${SYSTEM} -- unit s mkpart rootfs ${ROOTFS_START} -34s
+	if [ "${MULTIROOTFS}" == "1" ];  then
+		parted -s ${SYSTEM} unit s mkpart rootfs1 ${ROOTFS_START} $(expr ${ROOTFS2_START} - 1)
+		parted -s ${SYSTEM} unit s mkpart rootfs2 ${ROOTFS2_START} $(expr ${ROOTFS2_START} + ${ROOT_SIZE})
+	else
+		parted -s ${SYSTEM} -- unit s mkpart rootfs ${ROOTFS_START} -34s
+	fi
 
 	if [ "$CHIP" == "rk3328" ] || [ "$CHIP" == "rk3399" ]; then
 		ROOT_UUID="B921B045-1DF0-41C3-AF44-4C6F280D3FAE"
+		if [ "${MULTIROOTFS}" == "1" ];  then
+			ROOT2_UUID="C921B045-1DF0-41C3-AF44-4C6F280D3FAE"
+		fi
 	else
 		ROOT_UUID="69DAD710-2CE4-4E3C-B16C-21A1D49ABED3"
 	fi
@@ -114,6 +125,16 @@ ${ROOT_UUID}
 w
 y
 EOF
+	if [ "${MULTIROOTFS}" == "1" ];  then
+		gdisk ${SYSTEM} <<EOF
+x
+c
+6
+${ROOT2_UUID}
+w
+y
+EOF
+	fi
 
 	# burn u-boot
 	echo "Writing u-boot unto system image"
@@ -138,6 +159,10 @@ EOF
 	# burn rootfs image
 	echo "Writing rootfs unto system image"
 	dd if=${ROOTFS_PATH} of=${SYSTEM} conv=notrunc,fsync seek=${ROOTFS_START}
+	if [ "${MULTIROOTFS}" == "1" ];  then
+		echo "Writing rootfs2 unto system image"
+		dd if=${ROOTFS_PATH} of=${SYSTEM} conv=notrunc,fsync seek=${ROOTFS2_START}
+	fi
 }
 
 if [ "$TARGET" = "boot" ]; then
