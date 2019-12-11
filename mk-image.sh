@@ -85,9 +85,9 @@ generate_system_image() {
 	# but this will overrite the backup table of GPT
 	# will cause corruption error for GPT
 	IMG_ROOTFS_SIZE=$(stat -L --format="%s" ${ROOTFS_PATH})
-#	if [ "${MULTIROOTFS}" == "1" ];  then
-#		IMG_ROOTFS_SIZE=$(expr ${IMG_ROOTFS_SIZE})
-#	fi
+	if [ "${MULTIROOTFS}" == "1" ];  then
+		IMG_ROOTFS_SIZE=$(expr ${IMG_ROOTFS_SIZE} \* 2)
+	fi
 	GPTIMG_MIN_SIZE=$(expr $IMG_ROOTFS_SIZE + \( ${LOADER1_SIZE} + ${RESERVED1_SIZE} + ${RESERVED2_SIZE} + ${LOADER2_SIZE} + ${ATF_SIZE} + ${BOOT_SIZE} + 35 \) \* 512)
 	GPT_IMAGE_SIZE=$(expr $GPTIMG_MIN_SIZE \/ 1024 \/ 1024 + 2)
 
