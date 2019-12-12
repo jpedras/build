@@ -50,6 +50,7 @@ fi
 generate_boot_image() {
 	BOOT=${OUT}/boota.img
 	BOOT2=${OUT}/bootb.img
+	CONFIG=${OUT}/config.img
 	rm -rf ${BOOT} ${BOOT2}
 
 	echo -e "\e[36m Generate Boot image start\e[0m"
@@ -69,6 +70,13 @@ generate_boot_image() {
 		mcopy -i ${BOOT2} -s /tmp/_extlinux.conf ::/extlinux/extlinux.conf
 		mcopy -i ${BOOT2} -s ${OUT}/kernel/* ::
 		rm /tmp/_extlinux.conf
+		dd if=/dev/zero of=${CONFIG} bs=1M count=0 seek=250
+		mkfs.ext4 ${CONFIG}
+		mkdir /tmp/mnt-config
+		sudo mount ${CONFIG} /tmp/mnt-config
+		sudo echo "1:6" > /tmp/mnt-config/CURRENT_BOOT
+		sudo umount ${CONFIG}
+		rmdir /tmp/mnt-config
 	fi
 
 	echo -e "\e[36m Generate Boot image : ${BOOT} success! \e[0m"
@@ -98,9 +106,10 @@ generate_system_image() {
 	IMG_ROOTFS_SIZE=$(stat -L --format="%s" ${ROOTFS_PATH})
 	if [ "${MULTIROOTFS}" == "1" ];  then
 		IMG_ROOTFS_SIZE=$(expr ${IMG_ROOTFS_SIZE} \* 2)
+		IMG_CONFIG_SIZE=$(stat -L --format="%s" ${CONFIG})
 	fi
 	GPTIMG_MIN_SIZE=$(expr $IMG_ROOTFS_SIZE + \( ${LOADER1_SIZE} + ${RESERVED1_SIZE} + ${RESERVED2_SIZE} + ${LOADER2_SIZE} + ${ATF_SIZE} + ${BOOT_SIZE} + 35 \) \* 512)
-	GPT_IMAGE_SIZE=$(expr $GPTIMG_MIN_SIZE \/ 1024 \/ 1024 + 500)
+	GPT_IMAGE_SIZE=$(expr $GPTIMG_MIN_SIZE \/ 1024 \/ 1024 + ${IMG_CONFIG_SIZE} + 500)
 
 	echo IMG_ROOTFS_SIZE=${IMG_ROOTFS_SIZE}
 	echo GPT_IMAGE_SIZE=${GPT_IMAGE_SIZE}
@@ -118,6 +127,7 @@ generate_system_image() {
 		parted -s ${SYSTEM} unit s mkpart rootfs1 ${ROOTFS_START} $(expr ${BOOT2_START} - 1)
 		parted -s ${SYSTEM} unit s mkpart bootb ${BOOT2_START} $(expr ${ROOTFS2_START} - 1)
 		parted -s ${SYSTEM} unit s mkpart rootfs2 ${ROOTFS2_START} $(expr ${ROOTFS2_START} + ${ROOT_SIZE} - 1)
+		parted -s ${SYSTEM} unit s mkpart cfg ${CONFIG_START} $(expr ${CONFIG_START} + ${IMG_CONFIG_SIZE} - 1)
 	else
 		parted -s ${SYSTEM} -- unit s mkpart rootfs ${ROOTFS_START} -34s
 	fi
