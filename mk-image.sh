@@ -111,12 +111,10 @@ generate_system_image() {
 	parted -s ${SYSTEM} unit s mkpart loader2 ${LOADER2_START} $(expr ${ATF_START} - 1)
 	parted -s ${SYSTEM} unit s mkpart trust ${ATF_START} $(expr ${BOOT_START} - 1)
 	parted -s ${SYSTEM} unit s mkpart boot1 ${BOOT_START} $(expr ${ROOTFS_START} - 1)
-	if [ "${MULTIROOTFS}" == "1" ];  then
-		parted -s ${SYSTEM} unit s mkpart boot2 ${BOOT_START} $(expr ${ROOTFS_START} - 1)
-	fi
 	parted -s ${SYSTEM} set 4 boot on
 	if [ "${MULTIROOTFS}" == "1" ];  then
-		parted -s ${SYSTEM} unit s mkpart rootfs1 ${ROOTFS_START} $(expr ${ROOTFS2_START} - 1)
+		parted -s ${SYSTEM} unit s mkpart rootfs1 ${ROOTFS_START} $(expr ${BOOT2_START} - 1)
+		parted -s ${SYSTEM} unit s mkpart boot2 ${BOOT2_START} $(expr ${ROOTFS2_START} - 1)
 		parted -s ${SYSTEM} unit s mkpart rootfs2 ${ROOTFS2_START} $(expr ${ROOTFS2_START} + ${ROOT_SIZE})
 	else
 		parted -s ${SYSTEM} -- unit s mkpart rootfs ${ROOTFS_START} -34s
