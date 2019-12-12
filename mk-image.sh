@@ -48,14 +48,14 @@ if [ ! $CHIP ] && [ ! $TARGET ]; then
 fi
 
 generate_boot_image() {
-	BOOT=${OUT}/boot.img
-	BOOT2=${OUT}/boot2.img
+	BOOT=${OUT}/boota.img
+	BOOT2=${OUT}/bootb.img
 	rm -rf ${BOOT} ${BOOT2}
 
 	echo -e "\e[36m Generate Boot image start\e[0m"
 
 	# 100 Mb
-	mkfs.vfat -n "boot1" -S 512 -C ${BOOT} $((100 * 1024))
+	mkfs.vfat -n "boota" -S 512 -C ${BOOT} $((100 * 1024))
 
 	mmd -i ${BOOT} ::/extlinux
 	mcopy -i ${BOOT} -s ${EXTLINUXPATH}/${CHIP}.conf ::/extlinux/extlinux.conf
@@ -63,7 +63,7 @@ generate_boot_image() {
 
 	if [ "${MULTIROOTFS}" == "1" ];  then
 		echo "Boot2 enabled"
-		mkfs.vfat -n "boot2" -S 512 -C ${BOOT2} $((100 * 1024))
+		mkfs.vfat -n "bootb" -S 512 -C ${BOOT2} $((100 * 1024))
 		mmd -i ${BOOT2} ::/extlinux
 		sed 's/b921/c921/' ${EXTLINUXPATH}/${CHIP}.conf > /tmp/_extlinux.conf
 		mcopy -i ${BOOT2} -s /tmp/_extlinux.conf ::/extlinux/extlinux.conf
@@ -75,7 +75,7 @@ generate_boot_image() {
 }
 
 generate_system_image() {
-	if [ ! -f "${OUT}/boot.img" ]; then
+	if [ ! -f "${OUT}/boota.img" ]; then
 		echo -e "\e[31m CAN'T FIND BOOT IMAGE \e[0m"
 		usage
 		exit
@@ -100,8 +100,10 @@ generate_system_image() {
 		IMG_ROOTFS_SIZE=$(expr ${IMG_ROOTFS_SIZE} \* 2)
 	fi
 	GPTIMG_MIN_SIZE=$(expr $IMG_ROOTFS_SIZE + \( ${LOADER1_SIZE} + ${RESERVED1_SIZE} + ${RESERVED2_SIZE} + ${LOADER2_SIZE} + ${ATF_SIZE} + ${BOOT_SIZE} + 35 \) \* 512)
-	GPT_IMAGE_SIZE=$(expr $GPTIMG_MIN_SIZE \/ 1024 \/ 1024 + 2)
+	GPT_IMAGE_SIZE=$(expr $GPTIMG_MIN_SIZE \/ 1024 \/ 1024 + 500)
 
+	echo IMG_ROOTFS_SIZE=${IMG_ROOTFS_SIZE}
+	echo GPT_IMAGE_SIZE=${GPT_IMAGE_SIZE}
 	dd if=/dev/zero of=${SYSTEM} bs=1M count=0 seek=$GPT_IMAGE_SIZE
 
 	parted -s ${SYSTEM} mklabel gpt
@@ -110,12 +112,12 @@ generate_system_image() {
 	# parted -s ${SYSTEM} unit s mkpart reserved2 ${RESERVED2_START} $(expr ${LOADER2_START} - 1)
 	parted -s ${SYSTEM} unit s mkpart loader2 ${LOADER2_START} $(expr ${ATF_START} - 1)
 	parted -s ${SYSTEM} unit s mkpart trust ${ATF_START} $(expr ${BOOT_START} - 1)
-	parted -s ${SYSTEM} unit s mkpart boot1 ${BOOT_START} $(expr ${ROOTFS_START} - 1)
+	parted -s ${SYSTEM} unit s mkpart boota ${BOOT_START} $(expr ${ROOTFS_START} - 1)
 	parted -s ${SYSTEM} set 4 boot on
 	if [ "${MULTIROOTFS}" == "1" ];  then
 		parted -s ${SYSTEM} unit s mkpart rootfs1 ${ROOTFS_START} $(expr ${BOOT2_START} - 1)
-		parted -s ${SYSTEM} unit s mkpart boot2 ${BOOT2_START} $(expr ${ROOTFS2_START} - 1)
-		parted -s ${SYSTEM} unit s mkpart rootfs2 ${ROOTFS2_START} $(expr ${ROOTFS2_START} + ${ROOT_SIZE})
+		parted -s ${SYSTEM} unit s mkpart bootb ${BOOT2_START} $(expr ${ROOTFS2_START} - 1)
+		parted -s ${SYSTEM} unit s mkpart rootfs2 ${ROOTFS2_START} $(expr ${ROOTFS2_START} + ${ROOT_SIZE} - 1)
 	else
 		parted -s ${SYSTEM} -- unit s mkpart rootfs ${ROOTFS_START} -34s
 	fi
@@ -141,7 +143,7 @@ EOF
 		gdisk ${SYSTEM} <<EOF
 x
 c
-6
+7
 ${ROOT2_UUID}
 w
 y
@@ -166,7 +168,11 @@ EOF
 
 	# burn boot image
 	echo "Writing boot.img unto system image"
-	dd if=${OUT}/boot.img of=${SYSTEM} conv=notrunc seek=${BOOT_START}
+	dd if=${OUT}/boota.img of=${SYSTEM} conv=notrunc seek=${BOOT_START}
+	if [ "${MULTIROOTFS}" == "1" ];  then
+		echo "Writing boot2 unto system image"
+		dd if=${OUT}/bootb.img of=${SYSTEM} conv=notrunc seek=${BOOT2_START}
+	fi
 
 	# burn rootfs image
 	echo "Writing rootfs unto system image"

@@ -1,6 +1,9 @@
 #!/bin/bash -e
 
 LOCALPATH=$(pwd)
+
+source ${LOCALPATH}/build/partitions.sh
+
 OUT=${LOCALPATH}/out
 EXTLINUXPATH=${LOCALPATH}/build/extlinux
 BOARD=$1
