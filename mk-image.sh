@@ -49,16 +49,27 @@ fi
 
 generate_boot_image() {
 	BOOT=${OUT}/boot.img
-	rm -rf ${BOOT}
+	BOOT2=${OUT}/boot2.img
+	rm -rf ${BOOT} ${BOOT2}
 
 	echo -e "\e[36m Generate Boot image start\e[0m"
 
 	# 100 Mb
-	mkfs.vfat -n "boot" -S 512 -C ${BOOT} $((100 * 1024))
+	mkfs.vfat -n "boot1" -S 512 -C ${BOOT} $((100 * 1024))
 
 	mmd -i ${BOOT} ::/extlinux
 	mcopy -i ${BOOT} -s ${EXTLINUXPATH}/${CHIP}.conf ::/extlinux/extlinux.conf
 	mcopy -i ${BOOT} -s ${OUT}/kernel/* ::
+
+	if [ "${MULTIROOTFS}" == "1" ];  then
+		echo "Boot2 enabled"
+		mkfs.vfat -n "boot2" -S 512 -C ${BOOT2} $((100 * 1024))
+		mmd -i ${BOOT2} ::/extlinux
+		sed 's/b921/c921/' ${EXTLINUXPATH}/${CHIP}.conf > /tmp/_extlinux.conf
+		mcopy -i ${BOOT2} -s /tmp/_extlinux.conf ::/extlinux/extlinux.conf
+		mcopy -i ${BOOT2} -s ${OUT}/kernel/* ::
+		rm /tmp/_extlinux.conf
+	fi
 
 	echo -e "\e[36m Generate Boot image : ${BOOT} success! \e[0m"
 }
@@ -99,7 +110,10 @@ generate_system_image() {
 	# parted -s ${SYSTEM} unit s mkpart reserved2 ${RESERVED2_START} $(expr ${LOADER2_START} - 1)
 	parted -s ${SYSTEM} unit s mkpart loader2 ${LOADER2_START} $(expr ${ATF_START} - 1)
 	parted -s ${SYSTEM} unit s mkpart trust ${ATF_START} $(expr ${BOOT_START} - 1)
-	parted -s ${SYSTEM} unit s mkpart boot ${BOOT_START} $(expr ${ROOTFS_START} - 1)
+	parted -s ${SYSTEM} unit s mkpart boot1 ${BOOT_START} $(expr ${ROOTFS_START} - 1)
+	if [ "${MULTIROOTFS}" == "1" ];  then
+		parted -s ${SYSTEM} unit s mkpart boot2 ${BOOT_START} $(expr ${ROOTFS_START} - 1)
+	fi
 	parted -s ${SYSTEM} set 4 boot on
 	if [ "${MULTIROOTFS}" == "1" ];  then
 		parted -s ${SYSTEM} unit s mkpart rootfs1 ${ROOTFS_START} $(expr ${ROOTFS2_START} - 1)
