@@ -7,6 +7,7 @@ EXTLINUXPATH=${LOCALPATH}/build/extlinux
 CHIP=""
 TARGET=""
 ROOTFS_PATH=""
+CONFIG=${OUT}/config.img
 
 PATH=$PATH:$TOOLPATH
 
@@ -50,8 +51,7 @@ fi
 generate_boot_image() {
 	BOOT=${OUT}/boota.img
 	BOOT2=${OUT}/bootb.img
-	CONFIG=${OUT}/config.img
-	rm -rf ${BOOT} ${BOOT2}
+	rm -rf ${BOOT} ${BOOT2} ${CONFIG}
 
 	echo -e "\e[36m Generate Boot image start\e[0m"
 
@@ -74,7 +74,7 @@ generate_boot_image() {
 		mkfs.ext4 ${CONFIG}
 		mkdir /tmp/mnt-config
 		sudo mount ${CONFIG} /tmp/mnt-config
-		sudo echo "1:6" > /tmp/mnt-config/CURRENT_BOOT
+		echo "1:6" | sudo dd of=/tmp/mnt-config/CURRENT_BOOT
 		sudo umount ${CONFIG}
 		rmdir /tmp/mnt-config
 	fi
@@ -106,13 +106,27 @@ generate_system_image() {
 	IMG_ROOTFS_SIZE=$(stat -L --format="%s" ${ROOTFS_PATH})
 	if [ "${MULTIROOTFS}" == "1" ];  then
 		IMG_ROOTFS_SIZE=$(expr ${IMG_ROOTFS_SIZE} \* 2)
-		IMG_CONFIG_SIZE=$(stat -L --format="%s" ${CONFIG})
+		_IMG_CONFIG_SIZE=$(stat -L --format="%s" ${CONFIG})
+		IMG_CONFIG_SIZE=$(expr ${_IMG_CONFIG_SIZE} \/ 512)
+		# all these vars are sectors!!!
+		GPTIMG_MIN_SIZE=$(expr $IMG_ROOTFS_SIZE + \( ${LOADER1_SIZE} + ${RESERVED1_SIZE} + ${RESERVED2_SIZE} + ${LOADER2_SIZE} + ${ATF_SIZE} + \( ${BOOT_SIZE} \* 2 \) + ${IMG_CONFIG_SIZE} + 35 \) \* 512)
+	else
+		# all these vars are sectors!!!
+		GPTIMG_MIN_SIZE=$(expr $IMG_ROOTFS_SIZE + \( ${LOADER1_SIZE} + ${RESERVED1_SIZE} + ${RESERVED2_SIZE} + ${LOADER2_SIZE} + ${ATF_SIZE} + ${BOOT_SIZE} + 35 \) \* 512)
 	fi
-	GPTIMG_MIN_SIZE=$(expr $IMG_ROOTFS_SIZE + \( ${LOADER1_SIZE} + ${RESERVED1_SIZE} + ${RESERVED2_SIZE} + ${LOADER2_SIZE} + ${ATF_SIZE} + ${BOOT_SIZE} + 35 \) \* 512)
-	GPT_IMAGE_SIZE=$(expr $GPTIMG_MIN_SIZE \/ 1024 \/ 1024 + ${IMG_CONFIG_SIZE} + 500)
+	GPT_IMAGE_SIZE=$(expr $GPTIMG_MIN_SIZE \/ 1024 \/ 1024 + 500)
 
 	echo IMG_ROOTFS_SIZE=${IMG_ROOTFS_SIZE}
+	echo LOADER1_SIZE=${LOADER1_SIZE}
+	echo RESERVED1_SIZE=${RESERVED1_SIZE}
+	echo RESERVED2_SIZE=${RESERVED2_SIZE}
+	echo LOADER2_SIZE=${LOADER2_SIZE}
+	echo ATF_SIZE=${ATF_SIZE}
+	echo BOOT_SIZE=${BOOT_SIZE}
+	echo IMG_CONFIG_SIZE=${IMG_CONFIG_SIZE}
 	echo GPT_IMAGE_SIZE=${GPT_IMAGE_SIZE}
+	echo GPTIMG_MIN_SIZE=${GPTIMG_MIN_SIZE}
+
 	dd if=/dev/zero of=${SYSTEM} bs=1M count=0 seek=$GPT_IMAGE_SIZE
 
 	parted -s ${SYSTEM} mklabel gpt
@@ -136,6 +150,7 @@ generate_system_image() {
 		ROOT_UUID="B921B045-1DF0-41C3-AF44-4C6F280D3FAE"
 		if [ "${MULTIROOTFS}" == "1" ];  then
 			ROOT2_UUID="C921B045-1DF0-41C3-AF44-4C6F280D3FAE"
+			CONFIG_UUID="D921B045-1DF0-41C3-AF44-4C6F280D3FAE"
 		fi
 	else
 		ROOT_UUID="69DAD710-2CE4-4E3C-B16C-21A1D49ABED3"
@@ -155,6 +170,10 @@ x
 c
 7
 ${ROOT2_UUID}
+x
+c
+8
+${CONFIG_UUID}
 w
 y
 EOF
@@ -190,6 +209,8 @@ EOF
 	if [ "${MULTIROOTFS}" == "1" ];  then
 		echo "Writing rootfs2 unto system image"
 		dd if=${ROOTFS_PATH} of=${SYSTEM} conv=notrunc,fsync seek=${ROOTFS2_START}
+		echo "Writing config unto system image"
+		dd if=${CONFIG} of=${SYSTEM} conv=notrunc,fsync seek=${CONFIG_START}
 	fi
 }
 
