@@ -74,7 +74,7 @@ generate_boot_image() {
 		mkfs.ext4 ${CONFIG}
 		mkdir /tmp/mnt-config
 		sudo mount ${CONFIG} /tmp/mnt-config
-		echo "1:6" | sudo dd of=/tmp/mnt-config/CURRENT_BOOT
+		sudo touch /tmp/mnt-config/boot_a
 		sudo umount ${CONFIG}
 		rmdir /tmp/mnt-config
 	fi
