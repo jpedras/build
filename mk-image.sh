@@ -70,8 +70,12 @@ generate_boot_image() {
 		mcopy -i ${BOOT2} -s /tmp/_extlinux.conf ::/extlinux/extlinux.conf
 		mcopy -i ${BOOT2} -s ${OUT}/kernel/* ::
 		rm /tmp/_extlinux.conf
-		dd if=/dev/zero of=${CONFIG} bs=1M count=0 seek=250
-		mkfs.ext4 ${CONFIG}
+		if [ "${CONFIG_FS_FAT}" == "EXT4" ]; then
+			dd if=/dev/zero of=${CONFIG} bs=1M count=0 seek=250
+			mkfs.ext4 ${CONFIG}
+		else
+			mkfs.vfat -n "config" -S 512 -C ${CONFIG} $((250 * 1024))
+		fi
 		mkdir /tmp/mnt-config
 		sudo mount ${CONFIG} /tmp/mnt-config
 		sudo touch /tmp/mnt-config/boot_a
@@ -150,7 +154,9 @@ generate_system_image() {
 		ROOT_UUID="B921B045-1DF0-41C3-AF44-4C6F280D3FAE"
 		if [ "${MULTIROOTFS}" == "1" ];  then
 			ROOT2_UUID="C921B045-1DF0-41C3-AF44-4C6F280D3FAE"
-			CONFIG_UUID="D921B045-1DF0-41C3-AF44-4C6F280D3FAE"
+			if [ "${CONFIG_FS_FAT}" == "EXT4" ]; then
+				CONFIG_UUID="D921B045-1DF0-41C3-AF44-4C6F280D3FAE"
+			fi
 		fi
 	else
 		ROOT_UUID="69DAD710-2CE4-4E3C-B16C-21A1D49ABED3"
@@ -170,6 +176,12 @@ x
 c
 7
 ${ROOT2_UUID}
+w
+y
+EOF
+	fi
+
+	if [ "${MULTIROOTFS}" == "1" ] && [ "${CONFIG_FS_FAT}" == "EXT4" ]; then
 x
 c
 8
