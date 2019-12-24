@@ -54,6 +54,14 @@ case ${BOARD} in
 		export CROSS_COMPILE=aarch64-linux-gnu-
 		CHIP="rk3328"
 		;;
+	"roc-rk3328-pc")
+		DEFCONFIG=firefly-roc-rk3328-pc_defconfig
+		UBOOT_DEFCONFIG=firefly-rk3328
+		DTB=rk3328-roc-pc.dtb
+		export ARCH=arm64
+		export CROSS_COMPILE=aarch64-linux-gnu-
+		CHIP="rk3328"
+		;;
 	"roc-rk3328-cc")
 		DEFCONFIG=firefly-roc-rk3328-pc_defconfig
 		UBOOT_DEFCONFIG=roc-rk3328-cc_defconfig
