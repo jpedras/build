@@ -56,7 +56,7 @@ case ${BOARD} in
 		;;
 	"roc-rk3328-pc")
 		DEFCONFIG=firefly-roc-rk3328-pc_defconfig
-		UBOOT_DEFCONFIG=firefly-rk3328
+		UBOOT_DEFCONFIG=firefly-rk3328_defconfig
 		DTB=rk3328-roc-pc.dtb
 		export ARCH=arm64
 		export CROSS_COMPILE=aarch64-linux-gnu-
