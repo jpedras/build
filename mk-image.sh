@@ -86,6 +86,10 @@ generate_boot_image() {
 	echo -e "\e[36m Generate Boot image : ${BOOT} success! \e[0m"
 }
 
+stob() {
+	expr ${1} \* 512
+}
+
 generate_system_image() {
 	if [ ! -f "${OUT}/boota.img" ]; then
 		echo -e "\e[31m CAN'T FIND BOOT IMAGE \e[0m"
@@ -107,31 +111,67 @@ generate_system_image() {
 	# last dd rootfs will extend gpt image to fit the size,
 	# but this will overrite the backup table of GPT
 	# will cause corruption error for GPT
-	IMG_ROOTFS_SIZE=$(stat -L --format="%s" ${ROOTFS_PATH})
+	IMG_ROOTFS_SIZE_BYTES=$(stat -L --format="%s" ${ROOTFS_PATH})
+	ROOT_SIZE=$(expr ${IMG_ROOTFS_SIZE_BYTES} \/ 512)
+SYSTEM_START=0
+LOADER1_START=64
+RESERVED1_START=$(expr ${LOADER1_START} + ${LOADER1_SIZE})
+RESERVED2_START=$(expr ${RESERVED1_START} + ${RESERVED1_SIZE})
+LOADER2_START=$(expr ${RESERVED2_START} + ${RESERVED2_SIZE})
+ATF_START=$(expr ${LOADER2_START} + ${LOADER2_SIZE})
+BOOT_START=$(expr ${ATF_START} + ${ATF_SIZE})
+ROOTFS_START=$(expr ${BOOT_START} + ${BOOT_SIZE})
+
+# 1=yes, anything else no
+MULTIROOTFS=1
+BOOT2_START=$(expr ${ROOTFS_START} + ${ROOT_SIZE})
+ROOTFS2_START=$(expr ${BOOT2_START} + ${BOOT_SIZE})
+CONFIG_START=$(expr ${ROOTFS2_START} + ${ROOT_SIZE})
 	if [ "${MULTIROOTFS}" == "1" ];  then
-		IMG_ROOTFS_SIZE=$(expr ${IMG_ROOTFS_SIZE} \* 2)
-		_IMG_CONFIG_SIZE=$(stat -L --format="%s" ${CONFIG})
-		IMG_CONFIG_SIZE=$(expr ${_IMG_CONFIG_SIZE} \/ 512)
-		# all these vars are sectors!!!
-		GPTIMG_MIN_SIZE=$(expr $IMG_ROOTFS_SIZE + \( ${LOADER1_SIZE} + ${RESERVED1_SIZE} + ${RESERVED2_SIZE} + ${LOADER2_SIZE} + ${ATF_SIZE} + \( ${BOOT_SIZE} \* 2 \) + ${IMG_CONFIG_SIZE} + 35 \) \* 512)
+		IMG_ROOTFS_SIZE_BYTES=$(expr ${IMG_ROOTFS_SIZE_BYTES} \* 2)
+
+		IMG_CONFIG_SIZE_BYTES=$(stat -L --format="%s" ${CONFIG})
+		IMG_CONFIG_SIZE=$(expr ${IMG_CONFIG_SIZE_BYTES} \/ 512)
+
+		# some of these vars are in sectors!!!
+		GPTIMG_MIN_SIZE=$(expr $IMG_ROOTFS_SIZE_BYTES + \( ${LOADER1_SIZE} + ${RESERVED1_SIZE} + ${RESERVED2_SIZE} + ${LOADER2_SIZE} + ${ATF_SIZE} + \( ${BOOT_SIZE} \* 2 \) + ${IMG_CONFIG_SIZE} \) \* 512)
 	else
 		# all these vars are sectors!!!
-		GPTIMG_MIN_SIZE=$(expr $IMG_ROOTFS_SIZE + \( ${LOADER1_SIZE} + ${RESERVED1_SIZE} + ${RESERVED2_SIZE} + ${LOADER2_SIZE} + ${ATF_SIZE} + ${BOOT_SIZE} + 35 \) \* 512)
+		GPTIMG_MIN_SIZE=$(expr $IMG_ROOTFS_SIZE_BYTES + \( ${LOADER1_SIZE} + ${RESERVED1_SIZE} + ${RESERVED2_SIZE} + ${LOADER2_SIZE} + ${ATF_SIZE} + ${BOOT_SIZE} + 35 \) \* 512)
+		GPTIMG_MIN_SIZE=$(expr $IMG_ROOTFS_SIZE_BYTES + \( ${LOADER1_SIZE} + ${RESERVED1_SIZE} + ${RESERVED2_SIZE} + ${LOADER2_SIZE} + ${ATF_SIZE} + ${BOOT_SIZE} + ${IMG_CONFIG_SIZE} \) \* 512)
 	fi
-	GPT_IMAGE_SIZE=$(expr $GPTIMG_MIN_SIZE \/ 1024 \/ 1024 + 500)
+	GPT_IMAGE_SIZE=$(expr $GPTIMG_MIN_SIZE \/ 1024 \/ 1024 + 2500)
 
+	echo MULTIROOTFS=${MULTIROOTFS}
 	echo IMG_ROOTFS_SIZE=${IMG_ROOTFS_SIZE}
+
+
+	echo LOADER1_START=${LOADER1_START}
 	echo LOADER1_SIZE=${LOADER1_SIZE}
+	echo RESERVED1_START=${RESERVED1_START}
 	echo RESERVED1_SIZE=${RESERVED1_SIZE}
+	echo RESERVED2_START=${RESERVED2_START}
 	echo RESERVED2_SIZE=${RESERVED2_SIZE}
+	echo LOADER2_START=${LOADER2_START}
 	echo LOADER2_SIZE=${LOADER2_SIZE}
+	echo ATF_START=${ATF_START}
 	echo ATF_SIZE=${ATF_SIZE}
+	echo BOOT_START=${BOOT_START}
 	echo BOOT_SIZE=${BOOT_SIZE}
+	echo ROOT_SIZE=${ROOT_SIZE}
 	echo IMG_CONFIG_SIZE=${IMG_CONFIG_SIZE}
 	echo GPT_IMAGE_SIZE=${GPT_IMAGE_SIZE}
 	echo GPTIMG_MIN_SIZE=${GPTIMG_MIN_SIZE}
 
 	dd if=/dev/zero of=${SYSTEM} bs=1M count=0 seek=$GPT_IMAGE_SIZE
+
+	#echo -n "obase=16; ${LOADER1_SIZE}"|bc
+	#printf "0x%08x@0x%08x(uboot),0x%08x@0x%08x(trust),0x%08x@0x%08x(boot),0x%08x@0x%08x(rootfs)\n" "${LOADER2_SIZE}" `stob ${LOADER2_START}` "${ATF_SIZE}" `stob ${ATF_START}`
+	printf "0x%08x@0x%08x(uboot),0x%08x@0x%08x(trust),0x%08x@0x%08x(boot),0x%08x@0x%08x(rootfs)\n" "${LOADER2_SIZE}" "${LOADER2_START}" "${ATF_SIZE}" "${ATF_START}" "${BOOT_SIZE}" "${BOOT_START}" "${ROOT_SIZE}" $(expr ${BOOT_START} + ${BOOT_SIZE})
+	#printf "0x%08x@0x%08x(uboot),0x%08x@0x%08x(trust)\n" "${LOADER2_SIZE}" "${LOADER2_START}" "${ATF_SIZE}" "${ATF_START}"
+	#printf "%d@%d\n" "${LOADER1_SIZE}" $(expr ${LOADER1_START} \* 512)
+	#echo -n "@"
+	#echo -n "obase=16; ${LOADER1_START}"|bc
 
 	parted -s ${SYSTEM} mklabel gpt
 	parted -s ${SYSTEM} unit s mkpart loader1 ${LOADER1_START} $(expr ${RESERVED1_START} - 1)
@@ -142,6 +182,13 @@ generate_system_image() {
 	parted -s ${SYSTEM} unit s mkpart boota ${BOOT_START} $(expr ${ROOTFS_START} - 1)
 	parted -s ${SYSTEM} set 4 boot on
 	if [ "${MULTIROOTFS}" == "1" ];  then
+		echo "multiroot parts..."
+		echo rootfs_start ${ROOTFS_START} $(expr ${BOOT2_START} - 1)
+		echo boot2_start ${BOOT2_START} $(expr ${ROOTFS2_START} - 1)
+		echo rootfs2_start ${ROOTFS2_START} $(expr ${ROOTFS2_START} + ${ROOT_SIZE} - 1)
+		echo config_start ${CONFIG_START} $(expr ${CONFIG_START} + ${IMG_CONFIG_SIZE} - 1)
+
+
 		parted -s ${SYSTEM} unit s mkpart rootfs1 ${ROOTFS_START} $(expr ${BOOT2_START} - 1)
 		parted -s ${SYSTEM} unit s mkpart bootb ${BOOT2_START} $(expr ${ROOTFS2_START} - 1)
 		parted -s ${SYSTEM} unit s mkpart rootfs2 ${ROOTFS2_START} $(expr ${ROOTFS2_START} + ${ROOT_SIZE} - 1)
